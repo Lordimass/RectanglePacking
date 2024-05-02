@@ -7,7 +7,7 @@ import os
 import math
 
 class Rect():
-    def __init__(self, width, height=None, img_path:str=None):
+    def __init__(self, width, height=None, img_path:str=None, scale=1):
         if height == None: # Allows for easier squares
             height = width
 
@@ -16,6 +16,7 @@ class Rect():
         self.dim = (width, height)
 
         self.img_path = img_path
+        self.scale = scale # If the rect had to be resized to fit on the grid, this value will change from 1
 
         self.area = width*height
         self.colour = (
@@ -23,9 +24,13 @@ class Rect():
             random.randint(0,255),
             random.randint(0,255),
         )
-
 class RectPacker():
     def __init__(self, width, dir=None, rects=None):
+        self.__sf = 1 # Everything must be scaled to this scale factor, then scaled back up to get real screen coordinates
+        while width > 1000: # Forcing width to 3 figures to fight latency
+            width //= 10
+            self.__sf *= 10
+
         self.space = (width, 10)
 
         if rects != None and dir != None: # Both provided, pack both into space
@@ -39,7 +44,6 @@ class RectPacker():
         else: # No source provided, raise an erro
             raise("No source for rectangles provided")
         
-        
         self.__occupation = numpy.full(shape=(self.space[1], self.space[0]), fill_value=False)
         self.__image = PIL.Image.new(mode="RGB", size=self.space)
         self.__drawable = PIL.ImageDraw.ImageDraw(self.__image)
@@ -49,18 +53,36 @@ class RectPacker():
         for rect in self.rects:
             self.__find_and_place(rect)
             i+=1
+        self.__image = self.__image.crop(self.__image.getbbox()) # Program intentionally overestimates height of the image, this crops it back down to size
         self.__image.save("output.png")
 
     def __load_rects_from_images(self, dir):
-        for img_path in os.listdir(dir):
+        img_paths = os.listdir(dir)
+        imgs = []
+
+        # Calculating the highest resolution to scale all images to be the same resolution
+        maxres = 0
+        for img_path in img_paths:
             img = Image.open(f"{dir}/{img_path}")
-            dim = [img.width, img.height]
-            if dim[0] > self.space[0]: # Image doesn't fit on the canvas, resizing
-                sf = self.space[0] / img.width
-                dim[0] = math.floor(dim[0] * sf)
-                dim[1] = math.floor(dim[1] * sf)
+            imgs.append(img)
+            maxres = max(maxres, img.width*img.height)
+            
+        for img in imgs:
+            res_sf = maxres/(img.width*img.height)
+            print(res_sf, img.width*img.height)
+            dim = [
+                img.width*math.sqrt(res_sf),
+                img.height*math.sqrt(res_sf)
+                ] # Image dimensions, scaled according to maximum resolution image
+            print(dim[0]*dim[1])
+            
+            sf = 1
+            while dim[0] > self.space[0]: # If the image is too large for the canvas, it will resize it.
+                dim[0] = math.floor(dim[0] / 10)
+                dim[1] = math.floor(dim[1] / 10)
+                sf *= 10
             self.rects.append(
-                Rect(dim[0], dim[1], img_path=img_path)
+                Rect(dim[0], dim[1], img_path=img_path, scale=sf)
             )
         
     def __sort_by_area(self, rectangles):
@@ -150,4 +172,4 @@ rects = [
     Rect(6,6)
 ]
 
-RectPacker(width=10, dir = "images").pack()
+RectPacker(width=1920, dir = "images").pack()
