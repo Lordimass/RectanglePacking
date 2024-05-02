@@ -3,16 +3,20 @@ from PIL import Image
 import random
 import PIL.ImageDraw
 import numpy
-import time
+import os
+import math
 
 class Rect():
-    def __init__(self, width, height=None):
+    def __init__(self, width, height=None, img_path:str=None):
         if height == None: # Allows for easier squares
             height = width
 
         self.width = width
         self.height = height
         self.dim = (width, height)
+
+        self.img_path = img_path
+
         self.area = width*height
         self.colour = (
             random.randint(0,255),
@@ -20,86 +24,130 @@ class Rect():
             random.randint(0,255),
         )
 
-def sort_by_area(rectangles):
-    # QUICK SORT ALGORITHM
-    if len(rectangles) <= 1: # Base case
-        return rectangles
-    
-    pivot = rectangles[0]
-    rectangles.pop(0)
-    lesser = []
-    greater = []
+class RectPacker():
+    def __init__(self, width, dir=None, rects=None):
+        self.space = (width, 10)
 
-    for rect in rectangles:
-        if rect.area < pivot.area:
-            lesser.append(rect)
-        else:
-            greater.append(rect)
+        if rects != None and dir != None: # Both provided, pack both into space
+            self.rects = self.__sort_by_area(rects)
+            self.__load_rects_from_images(dir)
+        elif rects != None: # Only rects provided, pack rects into space
+            self.rects = self.__sort_by_area(rects)
+        elif dir != None: # Only images provided, pack image dimensions into space
+            self.rects = []
+            self.__load_rects_from_images(dir)
+        else: # No source provided, raise an erro
+            raise("No source for rectangles provided")
+        
+        
+        self.__occupation = numpy.full(shape=(self.space[1], self.space[0]), fill_value=False)
+        self.__image = PIL.Image.new(mode="RGB", size=self.space)
+        self.__drawable = PIL.ImageDraw.ImageDraw(self.__image)
 
-    return sort_by_area(greater) + [pivot] + sort_by_area(lesser)
+    def pack(self): # Actual callable, main loop for packing.
+        i = 0
+        for rect in self.rects:
+            self.__find_and_place(rect)
+            i+=1
+        self.__image.save("output.png")
 
-def place_rect(rect:Rect, pos:tuple):
-    print(f"placing {rect.dim} at {pos}")
-    upleft = pos
-    downright = (pos[0]+rect.width-1, pos[1]+rect.height-1)
-    drawable.rectangle(
-        [upleft, downright],
-        fill=rect.colour
-    )
-    occupation[upleft[1]:downright[1]+1, upleft[0]:downright[0]+1] = True
+    def __load_rects_from_images(self, dir):
+        for img_path in os.listdir(dir):
+            img = Image.open(f"{dir}/{img_path}")
+            dim = [img.width, img.height]
+            if dim[0] > self.space[0]: # Image doesn't fit on the canvas, resizing
+                sf = self.space[0] / img.width
+                dim[0] = math.floor(dim[0] * sf)
+                dim[1] = math.floor(dim[1] * sf)
+            self.rects.append(
+                Rect(dim[0], dim[1], img_path=img_path)
+            )
+        
+    def __sort_by_area(self, rectangles):
+        # QUICK SORT ALGORITHM
+        if len(rectangles) <= 1: # Base case
+            return rectangles
+        
+        pivot = rectangles[0]
+        rectangles.pop(0)
+        lesser = []
+        greater = []
 
-def find_and_place(rect:Rect, occupation):
-    for y in range(len(occupation)):
-        for x in range(len(occupation[0])):
+        for rect in rectangles:
+            if rect.area < pivot.area:
+                lesser.append(rect)
+            else:
+                greater.append(rect)
 
-            if occupation[y,x] == True:
-                continue
+        return self.__sort_by_area(greater) + [pivot] + self.__sort_by_area(lesser)
 
-            # Potential place found, now needs to check if it will be on top of anything else
-            fail = False
-            downRight = (x+rect.width, y+rect.height)
-            if downRight[0]-1>=len(occupation[0]) or downRight[1]-1>=len(occupation): # Rect hangs outside of the image in this pos
-                fail = True
-            for coverx in range(x, downRight[0]):
-                if fail:
-                    break
-                for covery in range(y, downRight[1]):
-                    if occupation[covery,coverx] == True:
-                        fail = True
+    def __place_rect(self, rect:Rect, pos:tuple):
+        print(f"placing {rect.dim} at {pos}")
+        upleft = pos
+        downright = (pos[0]+rect.width-1, pos[1]+rect.height-1)
+        self.__drawable.rectangle(
+            [upleft, downright],
+            fill=rect.colour
+        )
+        self.__occupation[upleft[1]:downright[1]+1, upleft[0]:downright[0]+1] = True
+
+    def __find_and_place(self, rect:Rect):
+        for y in range(len(self.__occupation)):
+            for x in range(len(self.__occupation[0])):
+                if self.__occupation[y,x]: # Check if the current cell is taken
+                    continue # Can't place here, move to the next one
+                
+                # TopLeft corner found, now to check the area it will cover
+                TopLeft = (x,y)
+                BottomRight = (
+                    x+rect.width-1,
+                    y+rect.height-1
+                )
+
+                if BottomRight[0]>=len(self.__occupation[0]) or BottomRight[1]>=len(self.__occupation):
+                    continue # Rect will hang outside of the available space, discount it and move on
+
+                fail = False
+                for SweepY in range(TopLeft[1], BottomRight[1]+1):
+                    for SweepX in range(TopLeft[0], BottomRight[0]+1):
+                        if self.__occupation[SweepY, SweepX]:
+                            fail = True
+                            break
+                    if fail:
                         break
-            if fail:
-                #for i in range(rect.height):
-                #    occupation = numpy.concatenate((occupation, numpy.full(shape=(1,SPACE[0]), fill_value=False)))
-                #print(occupation)
-                #find_and_place(rect, occupation)
-                continue
+                if not fail:
+                    self.__place_rect(rect, (x,y))
+                    return
+                
+        # If it gets to this point, it must have failed to place it
+        # Increase height and try again
+        
+        print(f"Failed to place {rect.dim}, increasing canvas height and retrying")
 
-            place_rect(rect, (x,y))
-            return
-    print(f"Failed to place {rect.dim}")
+        # Expanding occupation array
+        additive = numpy.full(shape=(rect.height,self.space[0]), fill_value=False)
+        self.__occupation = numpy.concatenate((self.__occupation, additive))
 
-SPACE = (10,10)
+        # Expanding image
+        newimage = PIL.Image.new(mode="RGB", size=(self.space[0], rect.height+self.__image.height))
+        newimage.paste(self.__image)
+        self.__image = newimage
+        self.__drawable = PIL.ImageDraw.ImageDraw(self.__image)
+        self.__find_and_place(rect)
+
 rects = [
     Rect(2,1),
     Rect(1,1),
     Rect(5,3),
     Rect(6,1),
-    Rect(1,5),
     Rect(5,5),
     Rect(2,2),
     Rect(2,2),
     Rect(2,2),
     Rect(4,4),
-    Rect(1,2), # Seems to be overwriting the 1,1
-    Rect(6,2)
+    Rect(1,2),
+    Rect(6,2),
+    Rect(6,6)
 ]
-occupation = numpy.full(shape=(SPACE[1], SPACE[0]), fill_value=False)
-image = PIL.Image.new(mode="RGB", size=SPACE)
-drawable = PIL.ImageDraw.ImageDraw(image)
-rects = sort_by_area(rects) # Quick sort into descending order by area
-i = 0
-for rect in rects:
-    find_and_place(rect, occupation)
-    image.resize((SPACE[0]*100, SPACE[1]*100), resample=PIL.Image.NEAREST).save(f"{i}.png")
-    i += 1
-image.save("output.png")
+
+RectPacker(width=10, dir = "images").pack()
