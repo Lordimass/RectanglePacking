@@ -8,7 +8,7 @@ import math
 import json
 
 class Rect():
-    def __init__(self, width, height=None, img_path:str=None, scale=1):
+    def __init__(self, width, height=None, img_path:str=None, scale=1, colour=None):
         if height == None: # Allows for easier squares
             height = width
 
@@ -20,11 +20,15 @@ class Rect():
         self.scale = scale # If the rect had to be resized to fit on the grid, this value will change from 1
 
         self.area = width*height
-        self.colour = (
-            random.randint(0,255),
-            random.randint(0,255),
-            random.randint(0,255),
-        )
+        if colour == None:
+            self.colour = (
+                random.randint(0,255),
+                random.randint(0,255),
+                random.randint(0,255),
+            )
+        else:
+            self.colour = colour
+
 class RectPacker():
     def __init__(self, width, dir=None, rects=None, visualise = False):
         self.__sf = 1 # Everything must be scaled to this scale factor, then scaled back up to get real screen coordinates
@@ -32,7 +36,7 @@ class RectPacker():
             width //= 10
             self.__sf *= 10
 
-        self.space = (width, 10)
+        self.space = (width, 22)
 
         self.rects = []
         if rects != None: # Rects provided, pack rects into space
@@ -48,6 +52,27 @@ class RectPacker():
             self.__image = PIL.Image.new(mode="RGB", size=self.space)
             self.__drawable = PIL.ImageDraw.ImageDraw(self.__image)
         self.visualise = visualise # Allows visualisation to be disabled for performance
+
+        self.__place_rect(Rect(6,1,colour=(255,0,0)),(4,22))
+        self.__place_rect(Rect(1,1,colour=(255,0,0)),(4,21))
+        self.__place_rect(Rect(1,3,colour=(255,0,0)),(3,20))
+        self.__place_rect(Rect(3,4,colour=(255,0,0)),(0,19))
+        self.__place_rect(Rect(1,6,colour=(255,0,0)),(0,13))
+        self.__place_rect(Rect(2,4,colour=(255,0,0)),(0,0))
+        self.__place_rect(Rect(1,1,colour=(255,0,0)),(0,4))
+        self.__place_rect(Rect(1,2,colour=(255,0,0)),(2,0))
+        self.__place_rect(Rect(1,1,colour=(255,0,0)),(3,0))
+        self.__place_rect(Rect(5,1,colour=(255,0,0)),(5,0))
+        self.__place_rect(Rect(2,1,colour=(255,0,0)),(15,0))
+        self.__place_rect(Rect(1,5,colour=(255,0,0)),(16,1))
+        self.__place_rect(Rect(7,7,colour=(255,0,0)),(17,0))
+        self.__place_rect(Rect(1,12,colour=(255,0,0)),(23,7))
+        self.__place_rect(Rect(1,5,colour=(255,0,0)),(22,13))
+        self.__place_rect(Rect(1,1,colour=(255,0,0)),(18,22))
+        self.__place_rect(Rect(5,2,colour=(255,0,0)),(19,21))
+        self.__place_rect(Rect(1,1,colour=(255,0,0)),(21,20))
+        self.__place_rect(Rect(2,2,colour=(255,0,0)),(22,19))
+        self.__positions = {}
 
     def pack(self): # Actual callable, main loop for packing.
         i = 0
@@ -177,19 +202,12 @@ class RectPacker():
             self.__drawable = PIL.ImageDraw.ImageDraw(self.__image)
             self.__find_and_place(rect)
 
-'''rects = [
-    Rect(2,1),
-    Rect(1,1),
-    Rect(5,3),
-    Rect(6,1),
-    Rect(5,5),
-    Rect(2,2),
-    Rect(2,2),
-    Rect(2,2),
-    Rect(4,4),
-    Rect(1,2),
-    Rect(6,2),
-    Rect(6,6)
-]'''
+rects = [
+]
 
-RectPacker(width=1920, dir = "images").pack()
+for i in range(61):
+    rects.append(Rect(2,2))
+for i in range(14):
+    rects.append(Rect(3,3))
+
+RectPacker(width=24, rects=rects, visualise=True).pack()
